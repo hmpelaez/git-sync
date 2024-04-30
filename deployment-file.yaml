@@ -2,6 +2,7 @@ template-file-path: ./lambdas3.yaml
 
 parameters: 
     BucketName: test-bucket-lambda-s3-tt
+    BucketName2: test-bucket-lambda-s3-tt2
 
 tags:
     proyecto: 'test-cff'
