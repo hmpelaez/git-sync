@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Parameters:
   BucketName:
     Type: String
+  DBName:
+    Type: String
 Resources:
   Bucket:
     Type: AWS::S3::Bucket
@@ -58,7 +60,7 @@ Resources:
   DynamoDBTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: FileUploadTable
+      TableName: !Ref DBName
       AttributeDefinitions:
         - AttributeName: filename
           AttributeType: S
