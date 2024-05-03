@@ -3,6 +3,7 @@ template-file-path: ./lambdas3.yaml
 parameters: 
     BucketName: test-bucket-lambda-s3-tt
     DBName: FileUploadTable
+    DBName2: FileUploadTable2
 
 tags:
     proyecto: 'test-cff'

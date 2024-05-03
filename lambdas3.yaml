@@ -4,6 +4,8 @@ Parameters:
     Type: String
   DBName:
     Type: String
+  DBName2:
+    Type: String
 Resources:
   Bucket:
     Type: AWS::S3::Bucket
@@ -20,6 +22,8 @@ Resources:
                 Rules:
                   - Name: suffix
                     Value: .txt
+                  - Name: suffix
+                    Value: .csv
 
   ProcessingLambdaPermission:
     Type: AWS::Lambda::Permission
@@ -82,6 +86,99 @@ Resources:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
 
+  DynamoDBTable2:
+    UpdateReplacePolicy: Delete
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Ref DBName2
+      AttributeDefinitions:
+        - AttributeName: filename
+          AttributeType: S
+      KeySchema:
+        - AttributeName: filename
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  StateMachineExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${BucketName}-role-statemachine
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource:
+                  - !Sub arn:aws:dynamodb:*:*:table/${DBName}
+                  - !Sub arn:aws:dynamodb:*:*:table/${DBName2}
+          PolicyName: StateMachineRolePolicy
+
+  StateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      DefinitionString: |-
+        {
+          "StartAt": "CheckFileType",
+          "States": {
+            "CheckFileType": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.fileName",
+                  "StringMatches": "*.txt",
+                  "Next": "ProcessTextFile"
+                },
+                {
+                  "Variable": "$.fileName",
+                  "StringMatches": "*.csv",
+                  "Next": "ProcessCsvFile"
+                }
+              ],
+              "Default": "InvalidFile"
+            },
+            "ProcessTextFile": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::dynamodb:putItem",
+              "Parameters": {
+                "TableName": "FileUploadTable",
+                "Item": {
+                  "filename": { "S.$": "$.fileName" }
+                }
+              },
+              "End": true
+            },
+            "ProcessCsvFile": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::dynamodb:putItem",
+              "Parameters": {
+                "TableName": "FileUploadTable2",
+                "Item": {
+                  "filename": { "S.$": "$.fileName" }
+                }
+              },
+              "End": true
+            },
+            "InvalidFile": {
+              "Type": "Fail",
+              "Cause": "InvalidFile",
+              "Error": "InvalidFileType"
+            }
+          }
+        }
+      RoleArn: !GetAtt StateMachineExecutionRole.Arn
+
   ProcessingLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -89,16 +186,16 @@ Resources:
       Code:
         ZipFile: |
           import boto3
-          dynamodb = boto3.client('dynamodb')
+          stepfunctions = boto3.client('stepfunctions')
           def lambda_handler(event, context):
-              bucket_name = event['Records'][0]['s3']['bucket']['name']
-              key = event['Records'][0]['s3']['object']['key']
-              response = dynamodb.put_item(
-                  TableName='FileUploadTable',
-                  Item={
-                      'filename': {'S': key}
-                  }
-              )
+              for record in event['Records']:
+                  bucket_name = record['s3']['bucket']['name']
+                  key = record['s3']['object']['key']
+                  # Enviar información al Step Function
+                  response = stepfunctions.start_execution(
+                      stateMachineArn='ARN_de_tu_máquina_de_estados',
+                      input='{"fileName": "' + key + '"}'
+                  )
 
       Runtime: python3.8
       Handler: index.lambda_handler
