@@ -21,9 +21,7 @@ Resources:
               S3Key:
                 Rules:
                   - Name: suffix
-                    Value: .txt
-                  - Name: suffix
-                    Value: .csv
+                    Value: ""
 
   ProcessingLambdaPermission:
     Type: AWS::Lambda::Permission
