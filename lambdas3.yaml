@@ -30,10 +30,32 @@ Resources:
       SourceArn: !Sub arn:aws:s3:::${BucketName}
       SourceAccount: !Ref AWS::AccountId
 
+  IAMManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${BucketName}-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${BucketName}/*
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+              - dynamodb:PutItem
+            Resource: !Sub arn:aws:dynamodb:*:*:table/${DBName}
+
   ProcessingLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: LambdaS3FunctionRole
+      RoleName: !Sub ${BucketName}-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -41,24 +63,13 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
-      Policies:
-        - PolicyName: LambdaS3Policy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                Resource: !Sub arn:aws:s3:::${BucketName}/*
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: arn:aws:logs:*:*:*
+        ManagedPolicyArns:
+          - !Ref IAMManagedPolicy
 
   DynamoDBTable:
+    UpdateReplacePolicy: Delete
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
     Properties:
       TableName: !Ref DBName
       AttributeDefinitions:
@@ -68,8 +79,8 @@ Resources:
         - AttributeName: filename
           KeyType: HASH
       ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
   ProcessingLambdaFunction:
     Type: AWS::Lambda::Function
@@ -78,13 +89,10 @@ Resources:
       Code:
         ZipFile: |
           import boto3
-
           dynamodb = boto3.client('dynamodb')
-
           def lambda_handler(event, context):
               bucket_name = event['Records'][0]['s3']['bucket']['name']
               key = event['Records'][0]['s3']['object']['key']
-
               response = dynamodb.put_item(
                   TableName=FileUploadTable,
                   Item={
@@ -93,7 +101,7 @@ Resources:
               )
 
       Runtime: python3.8
-      Handler: index.handler
+      Handler: index.lambda_handler
       Role: !GetAtt ProcessingLambdaExecutionRole.Arn
       MemorySize: 512
       Timeout: 120
