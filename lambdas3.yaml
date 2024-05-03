@@ -51,8 +51,6 @@ Resources:
             Action:
               - dynamodb:PutItem
             Resource: !Sub arn:aws:dynamodb:*:*:table/${DBName}
-      Roles:
-           - ProcessingLambdaExecutionRole
 
   ProcessingLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -65,6 +63,8 @@ Resources:
             Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref IAMManagedPolicy
 
   DynamoDBTable:
     UpdateReplacePolicy: Delete
