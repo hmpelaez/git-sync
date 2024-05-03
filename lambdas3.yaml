@@ -52,7 +52,13 @@ Resources:
           - Effect: Allow
             Action:
               - dynamodb:PutItem
-            Resource: !Sub arn:aws:dynamodb:*:*:table/${DBName}
+            Resource: 
+              - !Sub arn:aws:dynamodb:*:*:table/${DBName}
+              - !Sub arn:aws:dynamodb:*:*:table/${DBName2}
+          - Effect: Allow
+            Action:
+              - states:StartExecution
+            Resource: !Ref StateMachine
 
   ProcessingLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -181,17 +187,23 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: LambdaS3Function
+      Environment:
+        Variables:
+          StateMachineArn: !Ref StateMachine
       Code:
         ZipFile: |
           import boto3
+          import os
+
           stepfunctions = boto3.client('stepfunctions')
+
           def lambda_handler(event, context):
               for record in event['Records']:
                   bucket_name = record['s3']['bucket']['name']
                   key = record['s3']['object']['key']
-                  # Enviar información al Step Function
+                  
                   response = stepfunctions.start_execution(
-                      stateMachineArn='ARN_de_tu_máquina_de_estados',
+                      stateMachineArn=os.environ['StateMachineArn'],
                       input='{"fileName": "' + key + '"}'
                   )
 
